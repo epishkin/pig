@@ -17,7 +17,10 @@
 package org.apache.pig.piggybank.test.storage.avro;
 
 import org.apache.avro.file.DataFileStream;
+import org.apache.avro.file.DataFileWriter;
 import org.apache.avro.generic.GenericDatumReader;
+import org.apache.avro.io.DatumWriter;
+import org.apache.avro.specific.SpecificDatumWriter;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -25,7 +28,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.mapreduce.Job;
 import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
 import org.apache.pig.backend.executionengine.ExecException;
@@ -33,8 +35,8 @@ import org.apache.pig.backend.executionengine.ExecJob;
 import org.apache.pig.backend.executionengine.ExecJob.JOB_STATUS;
 import org.apache.pig.backend.hadoop.executionengine.mapReduceLayer.JobCreationException;
 import org.apache.pig.impl.logicalLayer.FrontendException;
-import org.apache.pig.piggybank.storage.avro.AvroStorage;
 import org.apache.pig.piggybank.storage.avro.PigSchema2Avro;
+import org.apache.pig.piggybank.test.storage.avro.stringType.stringTypeTestSchema;
 import org.apache.pig.test.Util;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -44,7 +46,6 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
@@ -958,6 +959,39 @@ public class TestAvroStorage {
     }
 
     @Test
+    public void testStringTypeOverride() throws IOException {
+        // Verify that load succeeds with a string field where the storage class is not Utf8.
+        String outdir = outbasedir.replace("file:","");
+
+        String testStringTypeRecordFilename = outdir + "testStringTypeOverride.avro";
+
+        // First we create a new avro file using schema code that has been compiled with "-string"
+        stringTypeTestSchema testRecord = new stringTypeTestSchema();
+        testRecord.setField("Hello World");
+
+        // Now we ensure that the java code of this schema has been generated with the correct options.
+        Object theField = testRecord.getField();
+        assertTrue(theField instanceof String);
+        
+        // Serialize the record to disk using the AVRO api
+        DatumWriter<stringTypeTestSchema> testDatumWriter = new SpecificDatumWriter<stringTypeTestSchema>(stringTypeTestSchema.class);
+        DataFileWriter<stringTypeTestSchema> dataFileWriter = new DataFileWriter<stringTypeTestSchema>(testDatumWriter);
+        new File(outdir).mkdirs(); // First create the output dir or else the next command will fail
+        dataFileWriter.create(testRecord.getSchema(), new File(testStringTypeRecordFilename));
+        dataFileWriter.append(testRecord);
+        dataFileWriter.close();
+
+        // Then let PIG read the file
+        String output = outbasedir + "testStringTypeOverride";
+        deleteDirectory(new File(output));
+        String [] queries = {
+            "in = LOAD 'file://" + testStringTypeRecordFilename + "' " +
+            "     USING org.apache.pig.piggybank.storage.avro.AvroStorage ();",
+            "STORE in INTO '" + output + "';"
+            };
+        testAvroStorage( queries);
+    }
+
     public void testCorruptedFile2() throws IOException {
         // Verify that corrupted files are skipped if ignore_bad_files is enabled.
         // Output is expected to be empty.

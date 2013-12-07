@@ -1,0 +1,8 @@
+{
+    "type" : "record",
+    "name" : "org.apache.pig.piggybank.test.storage.avro.stringType.stringTypeTestSchema",
+    "fields" : [ {
+        "name" : "field",
+        "type" : "string"
+    } ]
+}
